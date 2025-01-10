@@ -1,0 +1,756 @@
+---
+title: "FINAL_SETUP"
+author: "Viyanka Moodley"
+date: "2024-08-10"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(DataExplorer)
+library(prettydoc)
+library(dplyr)
+```
+
+```{r data_read_and_structure_function}
+# function to read an individual SVC file
+read_svc_file <- function(filepath) {
+  # reading data and skipping first line(project prop says it only shows no. of lines, so no real value for eda/further analysis)
+  data <- read.csv(filepath, header = FALSE, skip = 1, sep = " ")
+  # naming cols
+  colnames(data) <- c("X", "Y", "timestamp", "pen_state", "azimuth", "altitude", "pressure")
+  return(data)
+}
+```
+
+```{r pulling_svcfiles_function}
+load_patient_data <- function(folder, patient_ids, session_folder = "session00001") {
+  data_list <- list()
+  
+  for (patient_id in patient_ids) {
+    # constructing the full path to the patient's folder
+    patient_folder <- file.path(folder, patient_id, session_folder)
+    # pulling the svc file in a patient session folder 
+    svc_file <- list.files(patient_folder, pattern = "\\.svc$", full.names = TRUE)[1]
+    
+    # reads the svc file and stores the data into "data"
+    data <- read_svc_file(svc_file)
+    data$patient_id <- patient_id  # adding a col for patient ids
+    data_list[[length(data_list) + 1]] <- data
+  }
+  
+  # combining the svcs into one big df
+  combined_data <- do.call(rbind, data_list)
+  return(combined_data)
+}
+
+```
+
+```{r patient_ids} 
+# manually listing patient ids for control and test participants
+control_ids <- c("C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10")
+test_ids <- c("T001", "T002", "T005", "T006", "T007", "T008", "T009", "T010", 
+              "T011", "T012", "T013", "T014", "T015", "T018", "T020", 
+              "T021", "T022", "T023", "T025", "T026", "T027", "T028", "T029")
+```
+
+```{r executing_functions}
+# loading control data (healthy)
+control <- load_patient_data("Controles30jun14", control_ids)
+# loading test data (protocolo temblor aka tremor protocol)
+test <- load_patient_data("Protocolo temblor", test_ids)
+```
+
+```{r checking_it_works}
+# checking structure of control and test dfs
+str(control)
+str(test)
+# checking first few rows to make sure data has loaded properly
+head(control)
+tail(test)
+```
+
+```{r r_stats}
+summary(control)
+```
+
+
+
+
+
+```{r}
+# adding a patient group column to each set of data so that the 
+control$patient_group <- "Healthy"
+test$patient_group <- "Parkinsons"
+
+# Combine control and test data into a single dataframe
+combined_data <- rbind(control, test)
+```
+
+
+```{r }
+str(combined_data)
+head(combined_data)
+```
+
+```{r}
+summary(combined_data) 
+```
+
+```{r}
+str(combined_data)
+```
+The data contains 121299 observations and there are 9 features. "patient_group" is the target variable and it distinguishes between healthy patients and patients with Parkinson's.
+```{r}
+summary(combined_data)
+```
+The dataset contains several variables that capture spatial coordinates (X, Y), time (timestamp), pen state, orientation (azimuth), altitude, and pressure data from handwriting samples, alongside patient identifiers and group classifications (healthy or Parkinson's). The spatial coordinates (X, Y) exhibit a considerable range, with Y showing a right-skewed distribution, indicating more values concentrated toward the lower end. The timestamp variable also displays a highly skewed distribution, suggesting that most of the data points were recorded earlier or that there are significant outliers at later timestamps. The pen_state predominantly has a value of 1, suggesting that the pen was mostly in contact with the surface during the recording.
+
+The azimuth and pressure variables show wide ranges, with azimuth demonstrating a right-skewed distribution and pressure appearing more symmetrically distributed. The altitude is relatively consistent across observations, with most values clustering around the median. Overall, the dataset exhibits several variables with skewed distributions and varying ranges, which may be useful for distinguishing between healthy individuals and those with Parkinson's. In our future analysis, we may need to focus on handling skewness, identifying potential outliers, and examining these variables' relationships to patient group classifications.
+```{r test_corr}
+numeric_cols <- c("X", "Y", "timestamp", "azimuth", "altitude", "pressure")
+
+cor_matrix <- cor(test[, numeric_cols], use = "complete.obs")
+
+# Convert the correlation matrix to a long format for ggplot2
+cor_df <- as.data.frame(as.table(cor_matrix))
+
+# Plot the correlation matrix using ggplot2
+ggplot(cor_df, aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name="Correlation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Correlation Matrix on Test Data", x = "", y = "") +
+  geom_text(aes(label = round(Freq, 2)), color = "black", size = 4)
+```
+```{r healthy_corr}
+cor_matrixx <- cor(control[, numeric_cols], use = "complete.obs")
+
+# Convert the correlation matrix to a long format for ggplot2
+cor_dff <- as.data.frame(as.table(cor_matrixx))
+
+# Plot the correlation matrix using ggplot2
+ggplot(cor_dff, aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name="Correlation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Correlation Matrix on Control Data", x = "", y = "") +
+  geom_text(aes(label = round(Freq, 2)), color = "black", size = 4)
+```
+The correlation matrices for the test data (Parkinson's patients) and control data (healthy participants) reveal both similarities and subtle differences in movement patterns. A strong negative correlation between X and Y in both groups suggests a consistent inverse relationship between these coordinates, indicating a similar overall movement pattern across all participants. However, differences emerge in other variables: for instance, the correlation between pressure and altitude is stronger in the control group (0.28) compared to the test group (0.23), which may indicate more consistent pressure control among healthy participants. Additionally, correlations with timestamp vary, with the test group showing distinct timing patterns (e.g., a positive correlation with altitude and a negative one with azimuth), suggesting potential differences in the speed or duration of movements between the groups.
+
+Overall, while both groups share some commonalities in movement, such as the X-Y relationship, the test group (Parkinson's patients) exhibits more variability in correlations related to timing and pressure, which may reflect differences in motor control or coordination. These variations could provide insights into the specific motor challenges faced by Parkinson's patients compared to healthy controls.
+```{r histogram_combined}
+library(ggplot2)
+
+# Loop through all numeric columns to create histograms
+numeric_cols <- c("X", "Y", "timestamp", "azimuth", "altitude", "pressure")
+
+for (col in numeric_cols) {
+  p <- ggplot(combined_data, aes_string(x = col)) +
+    geom_histogram(binwidth = 30, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", col), x = col, y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p) # Print each plot to display it
+}
+```
+
+```{r histogram_control}
+
+numeric_cols <- c("X", "Y", "timestamp", "azimuth", "altitude", "pressure")
+
+for (col in numeric_cols) {
+  p1 <- ggplot(control, aes_string(x = col)) +
+    geom_histogram(binwidth = 30, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", col), x = col, y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p1) # Print each plot to display it
+}
+```
+
+```{r histograms_test}
+numeric_cols <- c("X", "Y", "timestamp", "azimuth", "altitude", "pressure")
+
+for (col in numeric_cols) {
+  p2 <- ggplot(test, aes_string(x = col)) +
+    geom_histogram(binwidth = 30, fill = "blue", color = "black", alpha = 0.7) +
+    labs(title = paste("Histogram of", col), x = col, y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p2) # Print each plot to display it
+}
+```
+
+```{r boxplots_combined}
+numeric_cols <- c("X", "Y", "timestamp", "azimuth", "altitude", "pressure")
+
+for (col in numeric_cols) {
+  bp <- ggplot(combined_data, aes_string(x = "patient_group", y = col, fill = "patient_group")) +
+    geom_boxplot() +
+    labs(title = paste("Boxplot of", col, "by Patient Group"), x = "Patient Group", y = col) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(bp) # Print each plot to display it
+}
+```
+```{r}
+ggplot(combined_data, aes(x = pen_state, fill = patient_group)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Frequency of Pen States by Patient Group", x = "Pen State", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The bar plot shows the frequency of `pen_state` for both "Healthy" and "Parkinsons" patient groups. The `pen_state` variable appears to have two main values: 0 (pen not in contact) and 1 (pen in contact). The plot indicates that most of the recorded data points have a `pen_state` of 1, meaning the pen was in contact with the surface for the majority of the time.
+
+In the "Healthy" group (red), almost all data points have a `pen_state` of 1, with very few instances where the pen was not in contact (0). For the "Parkinsons" group (teal), there is a noticeable number of instances where the pen was not in contact (0), although the majority still shows a `pen_state` of 1. This difference suggests that patients with Parkinson's might have more interruptions or moments when the pen is lifted off the surface, possibly due to tremors or involuntary hand movements that cause them to lose contact with the writing surface more frequently than healthy individuals.
+
+```{r}
+ggplot(combined_data, aes(x = X, y = Y, color = patient_group)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Scatter Plot of X vs Y by Patient Group", x = "X", y = "Y") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The scatter plot shows how the X and Y coordinates vary for both "Healthy" and "Parkinsons" patient groups. You can see that the healthy group (in red) has more concentrated clusters, forming relatively tight patterns in specific areas. This suggests that their movements were more consistent and controlled.
+
+On the other hand, the Parkinson's group (in teal) has more spread-out points, with loops and swirls showing up across a broader range of coordinates. This wider spread and the circular patterns might reflect the less steady or more varied movements typically associated with Parkinson's, like tremors or other involuntary movements. Overall, the plot shows clear differences in movement patterns between the two groups, which could be valuable for further analysis
+
+
+
+
+```{r}
+# Split the combined data by patient_id
+split_data <- split(combined_data, combined_data$patient_id)
+
+# Loop over each patient and generate a scatter plot for X vs Y
+for (patient_id in names(split_data)) {
+  patient_data <- split_data[[patient_id]]
+  
+  p <- ggplot(patient_data, aes(x = X, y = Y)) +
+    geom_point(alpha = 0.7) +
+    labs(title = paste("X vs Y Scatter Plot for Patient", patient_id), 
+         x = "X Coordinate", y = "Y Coordinate") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p) # Print each individual plot
+}
+
+```
+
+```{r}
+# Function to calculate total distance covered by each patient
+calculate_total_distance <- function(data) {
+  data %>%
+    group_by(patient_id) %>%  # Group by patient_id
+    arrange(timestamp) %>%     # Ensure data is ordered by time
+    mutate(
+      # Calculate Euclidean distance between consecutive points
+      distance = sqrt((X - lag(X))^2 + (Y - lag(Y))^2)
+    ) %>%
+    summarise(
+      total_distance = sum(distance, na.rm = TRUE)  # Sum the distances for each patient
+    )
+}
+
+# Calculate total distance for control patients
+control_distances <- calculate_total_distance(control)
+
+# Calculate total distance for test patients
+test_distances <- calculate_total_distance(test)
+
+# Combine the results
+total_distances <- bind_rows(control_distances, test_distances)
+
+# View the result
+total_distances
+```
+```{r}
+# Create copies of the original control and test datasets
+#control_copy <- control
+#test_copy <- test
+```
+
+```{r}
+# Function to calculate motion-related features on the copied datasets
+#calculate_motion_features <- function(data) {
+  #data %>%
+   # group_by(patient_id) %>%
+#    arrange(timestamp) %>%
+#    mutate(
+#      # Calculate distance between consecutive points
+#      distance = sqrt((X - lag(X))^2 + (Y - lag(Y))^2),
+#      
+#      # Calculate time difference between consecutive points
+#      time_diff = timestamp - lag(timestamp),
+      
+#      # Velocity: Distance / Time
+#      velocity = distance / time_diff,
+      
+#      # Acceleration: Change in velocity / Time
+#      acceleration = (velocity - lag(velocity)) / time_diff,
+      
+      # Jerk: Change in acceleration / Time
+#      jerk = (acceleration - lag(acceleration)) / time_diff
+#    ) %>%
+#    ungroup()
+#}
+
+# Apply motion feature calculation to copies
+#control_copy <- calculate_motion_features(control_copy)
+#test_copy <- calculate_motion_features(test_copy)
+
+```
+
+```{r}
+# Load necessary libraries
+#library(dplyr)
+
+# Function to calculate the duration for each patient
+#calculate_duration <- function(data) {
+ # data %>%
+   # group_by(patient_id) %>%
+    #summarise(
+     # start_time = min(timestamp, na.rm = TRUE),
+     # end_time = max(timestamp, na.rm = TRUE),
+     # duration = end_time - start_time # Duration is the difference between the last and first timestamp
+   # ) %>%
+   # ungroup()
+#}
+
+# Apply the function to both control and test datasets
+#control_duration <- calculate_duration(control_copy)
+#test_duration <- calculate_duration(test_copy)
+
+# Combine the results for both control and test patients
+#total_duration <- bind_rows(control_duration, test_duration)
+
+# View the resulting data frame with patient IDs and their corresponding durations
+#print(total_duration)
+
+```
+
+```{r}
+# Function to calculate motion-related features on the copied datasets
+#calculate_motion_features <- function(data) {
+  #data %>%
+   # group_by(patient_id) %>%
+   # arrange(timestamp) %>%
+   # mutate(
+   #   # Calculate distance between consecutive points
+    #  distance = sqrt((X - lag(X))^2 + (Y - lag(Y))^2),
+    #  
+      # Calculate time difference between consecutive points
+   #   time_diff = timestamp - lag(timestamp),
+      
+      # Velocity: Distance / Time
+    #  velocity = distance / time_diff,
+      
+      # Acceleration: Change in velocity / Time
+   #   acceleration = (velocity - lag(velocity)) / time_diff,
+      
+      # Jerk: Change in acceleration / Time
+ #  #   jerk = (acceleration - lag(acceleration)) / time_diff
+ #   ) %>%
+  #  ungroup()
+#}
+
+# Apply motion feature calculation to copies
+#control_copy <- calculate_motion_features(control_copy)
+#test_copy <- calculate_motion_features(test_copy)
+
+```
+
+
+
+```{r}
+# Function to calculate pen down and pen up time
+#calculate_pen_time_features <- function(data) {
+ # data %>%
+ #   group_by(patient_id) %>%
+   # arrange(timestamp) %>%
+  #  mutate(
+      # Calculate time difference between consecutive points
+ #     time_diff = timestamp - lag(timestamp),
+ #     
+      # Pen down time: Sum of time differences where pen_state = 1
+ #     pen_down_time = sum(time_diff[pen_state == 1], na.rm = TRUE),
+      
+      # Pen up time: Sum of time differences where pen_state = 0
+#      pen_up_time = sum(time_diff[pen_state == 0], na.rm = TRUE)
+  #  ) %>%
+#    ungroup()
+##}
+
+# Apply pen time feature calculation to copies
+#control_copy <- calculate_pen_time_features(control_copy)
+#test_copy <- calculate_pen_time_features(test_copy)
+
+```
+
+```{r}
+# Function to calculate pressure-related features
+#calculate_pressure_features <- function(data) {
+ # data %>%
+    #group_by(patient_id) %>%
+   # summarise(
+      #mean_pressure = mean(pressure, na.rm = TRUE),
+     # sd_pressure = sd(pressure, na.rm = TRUE),
+  #    max_pressure = max(pressure, na.rm = TRUE),
+      #min_pressure = min(pressure, na.rm = TRUE)
+  #  ) %>%
+   # ungroup()
+#}
+
+# Apply pressure feature calculation to copies
+#control_pressure_features <- calculate_pressure_features(control_copy)
+#test_pressure_features <- calculate_pressure_features(test_copy)
+
+# Merge pressure features back to the data copies
+#control_copy <- merge(control_copy, control_pressure_features, by = "patient_id")
+#test_copy <- merge(test_copy, test_pressure_features, by = "patient_id")
+
+```
+
+
+
+```{r}
+# Function to calculate stroke count
+#calculate_stroke_count <- function(data) {
+ # data %>%
+#    group_by(patient_id) %>%
+  #  summarise(
+   #   stroke_count = sum(diff(pen_state) != 0)  # Count transitions from 0 to 1 or 1 to 0
+  #  ) %>%
+ #   ungroup()
+#}
+
+# Apply stroke count calculation to copies
+#control_strokes <- calculate_stroke_count(control_copy)
+#test_strokes <- calculate_stroke_count(test_copy)
+
+# Merge stroke count back to the data copies
+#control_copy <- merge(control_copy, control_strokes, by = "patient_id")
+#test_copy <- merge(test_copy, test_strokes, by = "patient_id")
+
+```
+
+
+```{r}
+# Function to calculate curvature
+#calculate_curvature <- function(data) {
+ # data %>%
+#    group_by(patient_id) %>%
+  #  arrange(timestamp) %>%
+ #   mutate(
+ #     # Angle of movement between consecutive points
+     # angle = atan2(Y - lag(Y), X - lag(X)),
+  #    
+      # Change in angle (curvature)
+  #    curvature = abs(angle - lag(angle))
+  #  ) %>%
+  #  ungroup()
+#}#
+
+# Apply curvature calculation to copies
+#control_copy <- calculate_curvature(control_copy)
+#test_copy <- calculate_curvature(test_copy)
+
+```
+
+
+```{r}
+# Combine control and test copies into a single dataframe
+#combined_copy_data <- bind_rows(control_copy, test_copy)
+
+# Check the structure of the combined dataset with new features
+#str(combined_copy_data)
+
+```
+
+```{r}
+#length(unique(combined_data$patient_id))
+```
+
+```{r}
+#control_1 <- control
+#test_1 <- test
+# Loading necessary libraries
+#library(dplyr)
+#library(ggplot2)
+
+# Function to calculate all time-dependent features (velocity, acceleration, jerk, curvature, pen-up/pen-down time)
+#calculate_time_dependent_features <- function(data) {
+ # data %>%
+   # group_by(patient_id) %>%
+  #  arrange(timestamp) %>%
+   # mutate(
+  ##    # Calculate time difference between consecutive points
+    #  time_diff = timestamp - lag(timestamp),
+      
+      # Calculate Euclidean distance between consecutive points (movement)
+     # distance = sqrt((X - lag(X))^2 + (Y - lag(Y))^2),
+      
+      # Velocity: Distance / Time
+      #velocity = distance / time_diff,
+      
+      # Acceleration: Change in velocity / Time
+     # acceleration = (velocity - lag(velocity)) / time_diff,
+      
+      # Jerk: Change in acceleration / Time
+     # jerk = (acceleration - lag(acceleration)) / time_diff,
+      
+      # Calculate curvature based on change in angles
+     # angle = atan2(Y - lag(Y), X - lag(X)),
+     # curvature = abs(angle - lag(angle)),
+      
+      # Calculate pen-down and pen-up times (use 1 for down and 0 for up)
+    #  pen_down_time = sum(time_diff[pen_state == 1], na.rm = TRUE),
+    #  pen_up_time = sum(time_diff[pen_state == 0], na.rm = TRUE)
+   # ) %>%
+    # Summarizing the time-dependent features for each patient
+  #  summarise(
+     # total_distance = sum(distance, na.rm = TRUE),
+   #   mean_velocity = mean(velocity, na.rm = TRUE),
+    #  mean_acceleration = mean(acceleration, na.rm = TRUE),
+  #    mean_jerk = mean(jerk, na.rm = TRUE),
+    #  mean_curvature = mean(curvature, na.rm = TRUE),
+   #   pen_down_time = first(pen_down_time),
+  #    pen_up_time = first(pen_up_time)
+   # ) %>%
+  #  ungroup()
+#}
+
+# Apply the function to both control and test datasets
+#control_features <- calculate_time_dependent_features(control_1)
+#test_features <- calculate_time_dependent_features(test_1)
+
+# Combine the results
+#combined_features <- bind_rows(control_features, test_features)
+
+# View the resulting data frame
+#print(combined_features)
+
+```
+
+```{r}
+## Calculate autocorrelation for X and Y coordinates
+#autocorrelation_x <- acf(control$X, plot = FALSE)$acf[2]  # Lag-1 #autocorrelation for X
+#autocorrelation_y <- acf(control$Y, plot = FALSE)$acf[2]  # Lag-1 autocorrelation for Y
+
+# Print autocorrelation values
+#print(autocorrelation_x)
+#print(autocorrelation_y)
+
+
+```
+
+## UP TO HERE
+
+```{r}
+control1 <- control
+test1 <- test
+# Function to calculate motion-related features on the copied datasets
+calculate_motion_features <- function(data) {
+  data %>%
+    group_by(patient_id) %>%
+    arrange(timestamp) %>%
+    mutate(
+      # Calculate distance between consecutive points
+      distance = sqrt((X - lag(X))^2 + (Y - lag(Y))^2),
+      
+      # Calculate time difference between consecutive points
+      time_diff = timestamp - lag(timestamp),
+      
+      # Velocity: Distance / Time
+      velocity = distance / time_diff,
+      
+      # Acceleration: Change in velocity / Time
+      acceleration = (velocity - lag(velocity)) / time_diff,
+      
+      # Jerk: Change in acceleration / Time
+      jerk = (acceleration - lag(acceleration)) / time_diff
+    ) %>%
+    ungroup()
+}
+
+# Apply motion feature calculation to copies
+control1 <- calculate_motion_features(control1)
+test1 <- calculate_motion_features(test1)
+
+```
+
+```{r}
+# Function to calculate autocorrelation
+calculate_autocorrelation <- function(data) {
+  data %>%
+    group_by(patient_id) %>%
+    summarise(
+      autocorr_X = cor(X[-1], lag(X)[-1], use = "complete.obs"),  # Autocorrelation for X
+      autocorr_Y = cor(Y[-1], lag(Y)[-1], use = "complete.obs")   # Autocorrelation for Y
+    ) %>%
+    ungroup()
+}
+
+# Apply autocorrelation calculation
+control_autocorr <- calculate_autocorrelation(control1)
+test_autocorr <- calculate_autocorrelation(test1)
+
+# Merge autocorrelation results back to the data copies
+control1 <- merge(control1, control_autocorr, by = "patient_id")
+test1 <- merge(test1, test_autocorr, by = "patient_id")
+
+```
+
+```{r}
+# Function to calculate entropy of pressure for each patient
+calculate_entropy <- function(data) {
+  data %>%
+    group_by(patient_id) %>%
+    summarise(
+      pressure_entropy = -sum((pressure/sum(pressure)) * log(pressure/sum(pressure)), na.rm = TRUE)
+    ) %>%
+    ungroup()
+}
+
+# Apply entropy calculation to copies
+control_entropy <- calculate_entropy(control1)
+test_entropy <- calculate_entropy(test1)
+
+# Merge entropy results back to the data copies
+control1 <- merge(control1, control_entropy, by = "patient_id")
+test1 <- merge(test1, test_entropy, by = "patient_id")
+```
+
+```{r}
+# Function to calculate curvature (already defined)
+calculate_curvature <- function(data) {
+  data %>%
+    group_by(patient_id) %>%
+    arrange(timestamp) %>%
+    mutate(
+      # Angle of movement between consecutive points
+      angle = atan2(Y - lag(Y), X - lag(X)),
+      
+      # Change in angle (curvature)
+      curvature = abs(angle - lag(angle))
+    ) %>%
+    ungroup()
+}
+
+# Apply curvature calculation to copies
+control1 <- calculate_curvature(control1)
+test1 <- calculate_curvature(test1)
+
+```
+
+```{r}
+# Combine control and test copies into a single dataframe with all features
+combined1_data <- bind_rows(control1, test1)
+# Check the structure of the combined dataset with new features
+str(combined1_data)
+```
+
+```{r}
+colSums(is.na(combined1_data))
+```
+
+
+```{r}
+# Function to handle NAs at the edges by replacing with zeros
+handle_na_with_zero <- function(data) {
+  data %>%
+    mutate(
+      velocity = ifelse(is.na(velocity), 0, velocity),
+      acceleration = ifelse(is.na(acceleration), 0, acceleration),
+      jerk = ifelse(is.na(jerk), 0, jerk),
+      curvature = ifelse(is.na(curvature), 0, curvature),
+      angle = ifelse(is.na(angle), 0, angle),
+      distance = ifelse(is.na(distance), 0, distance),
+      time_diff = ifelse(is.na(time_diff), 0, time_diff)
+    )
+}
+# Apply this function to both control and test datasets
+combined1_data <- handle_na_with_zero(combined1_data)
+```
+
+```{r}
+# Convert patient_group to a factor if not already
+combined1_data$patient_group <- as.factor(combined1_data$patient_group)
+combined1_data$patient_id <- as.character(combined1_data$patient_id)
+
+# Verify that other columns are numeric
+str(combined1_data)
+```
+
+```{r}
+write.csv(combined1_data, "~/Desktop/combined1_data.csv", row.names = FALSE)
+```
+
+
+```{r}
+## Load necessary libraries
+#library(caret)
+#library(randomForest)
+
+# Set seed for reproducibility
+#set.seed(123)
+
+# Train/Test split
+#sample <- sample(c(TRUE,FALSE), nrow(combined1_data),  
+                 #replace=TRUE, prob=c(0.7,0.3)) 
+  
+# creating training dataset 
+#train_dataset  <- combined1_data[sample, ] 
+  
+# creating testing dataset 
+#test_dataset  <- combined1_data[!sample, ] 
+  
+#print("Training Dataset") 
+#print (train_dataset) 
+#print("Testing Dataset") 
+#print (test_dataset)
+
+
+# Feature scaling (standardization), excluding 'patient_group'
+#preproc <- preProcess(train_data_for_model[, -which(names(train_data_for_model) == "patient_group")], method = c("center", "scale"))
+
+# Apply scaling to the training and test data
+#train_data_scaled <- predict(preproc, train_dataset[, -which(names(train_dataset) == "patient_group")])
+#test_data_scaled <- predict(preproc, test_dataset[, -which(names(test_dataset) == "patient_group")])
+
+# Add the 'patient_group' back to the scaled data after preprocessing
+#train_data_scaled$patient_group <- train_dataset$patient_group
+#test_data_scaled$patient_group <- test_dataset$patient_group
+
+# Train a Random Forest model
+#rf_model <- randomForest(patient_group ~ ., data = train_data_scaled)
+#importance(rf_model)
+
+# Model Evaluation on test set
+#predictions <- predict(rf_model, newdata = test_data_scaled)
+#confusionMatrix(predictions, test_data_scaled$patient_group)
+```
+
+```{r}
+#str(combined1_data)
+```
+
+
